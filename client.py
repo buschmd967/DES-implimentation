@@ -15,18 +15,26 @@ def connect(hostname, port):
 
 def recvMessages(s):
     while True:
-        data = s.recv(1024)
-        print(data)
+        try:
+            data = s.recv(1024)
+            print(data.decode())
+        except Exception as e:
+            print("Socket closed. Goodbye")
+            return
 
  
-def main():
-    s = connect("localhost", 4444)
-    Thread(target=recvMessages, args=(s,)).start()
+def main(username="guest"):
+    s = connect("localhost", 4445)
+    
 
-
-    message = "OPEN"
+    message = "OPEN:" + username
     bytes = str.encode(message)
     s.sendall(bytes)
+    print("Sent open")
+
+
+    Thread(target=recvMessages, args=(s,)).start()
+
     while(True):
         
         message = input("")
