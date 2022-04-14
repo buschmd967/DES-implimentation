@@ -11,10 +11,10 @@ def padBits(bits, l=64):
        bits = "0" + bits
     return bits
 
-def permute(data: int, table:List[int]) -> int:
+def permute(data: int, table:List[int], pad=64) -> int:
     out = []
-    bits = bin(data).strip('0b')
-    bits = padBits(bits)
+    bits = bin(data)[2:]
+    bits = padBits(bits, pad)
     for i in range(len(table)):
         out.append(bits[table[i]-1])
     outBits = "".join(out)
@@ -30,7 +30,7 @@ def shiftKeys(upper, lower, n):
 def getSubkeys(key: int) -> Dict:
     keys = {"C":[], "D":[] }
     key = permute(key, PC1)
-    key = bin(key).strip('0b')
+    key = bin(key)[2:]
     key = padBits(key, 56)
     print(f"{key=}")
 
@@ -46,8 +46,16 @@ def getSubkeys(key: int) -> Dict:
     return keys
         
 
-
-
+def getKeys(key):
+    subkeys = getSubkeys(key)
+    keys = []
+    for i in range(16):
+        key_concat = subkeys["C"][i] + subkeys["D"][i]
+        key_concat_int = int(key_concat, 2)
+        key_int = permute(key_concat_int, PC2, 56)
+        key = padBits(bin(key_int)[2:], 48)
+        keys.append(key)
+    return keys
 
 
 def message_to_blocks(message: str) -> List[int]:
@@ -77,10 +85,11 @@ def encrypt(message: str, key:str):
 
 
 def test():
-    print(padBits(bin(1383827165325090801).strip('0b')))
-    keys = getSubkeys(1383827165325090801)
-    print(keys["C"])
-    print(keys["D"])
+    # print(padBits(bin(1383827165325090801).strip('0b')))
+    keys = getKeys(1383827165325090801)
+    # print(keys["C"])
+    # print(keys["D"])
+    print(keys)
 
 if __name__ == "__main__":
     test()
