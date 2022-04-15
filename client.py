@@ -23,8 +23,23 @@ def recvMessages(s):
             return
 
  
-def main(username="guest"):
-    s = connect("localhost", 4445)
+def main():
+    username = "guest"
+    port = 1234
+    print(sys.argv)
+    if(len(sys.argv) < 2):
+        print("Please specify hostname and port")
+        sys.exit()
+    elif(len(sys.argv) >= 2):
+        hostname = sys.argv[1]
+        if(len(hostname.split(":")) == 2):
+            x = hostname.split(":")
+            hostname = x[0]
+            port = int(x[1])
+        if(len(sys.argv) == 3):
+            username = sys.argv[2]
+
+    s = connect(hostname, port)
     
 
     message = "OPEN:" + username

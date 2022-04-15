@@ -7,7 +7,7 @@ def startup():
     s = socket.socket()
 
     ip = "127.0.0.1"
-    port = 4445
+    port = 1234
 
     s.bind((ip, port))
 
