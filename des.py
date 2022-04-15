@@ -1,3 +1,4 @@
+from operator import xor
 import sys
 from math import ceil
 from typing import Dict, List
@@ -32,21 +33,22 @@ def getSubkeys(key: int) -> Dict:
     key = permute(key, PC1)
     key = bin(key)[2:]
     key = padBits(key, 56)
-    print(f"{key=}")
+    # print(f"{key=}")
 
     upper = key[0:28]
     lower = key[28:]
 
-    print(f"{upper=} {lower=}")
+    # print(f"{upper=} {lower=}")
     for i in range(16):
+        upper, lower = shiftKeys(upper, lower, SHIFT[i])
         keys["C"].append(upper)
         keys["D"].append(lower)
-        upper, lower = shiftKeys(upper, lower, SHIFT[i])
+        
 
     return keys
         
 
-def getKeys(key):
+def getKeys(key: int) -> Dict:
     subkeys = getSubkeys(key)
     keys = []
     for i in range(16):
@@ -56,9 +58,46 @@ def getKeys(key):
         key = padBits(bin(key_int)[2:], 48)
         keys.append(key)
     return keys
+    
+def S(input, box):
+    input = padBits(bin(input)[2:], 6)
+    i = input[0] + input[-1]
+    i = int(i, 2)
+    j = input[1:5]
+    j = int(j, 2)
+    out = box[i * 16 + j]
+    out = padBits(bin(out).replace("0b",""), 4)
+    return out
+
+def f(right: str, key: str):
+    right = permute(int(right, 2), ESEL, 32)
+    # right = int(right, 2)
+    key = int(key, 2)
+    data_xor = xor(key, right)
+    data = padBits(bin(data_xor)[2:], 48)
+    out = ""
+    for i in range(len(data)//6):
+        box_in = data[i*6:(i+1)*6]
+        box_out = S(int(box_in, 2), SBOXES[i])
+        out += box_out
+    return permute(int(out, 2), P, 32)
+    
+        
 
 
-def message_to_blocks(message: str) -> List[int]:
+def getCiphertext(left: str, right: str, keys: List[str]) -> int:
+    for i in range(16):
+        newLeft = right
+        f_out = f(right, keys[i])
+        right = xor(int(left, 2), f_out)
+        right = padBits(bin(right)[2:], 32)
+        left = newLeft
+    out = right + left
+    print(out)
+    out = permute(int(out, 2), IP_INV)
+    return out
+
+def messageToBlocks(message: str) -> List[int]:
     message = message.encode()
     chunkSize = 8
 
@@ -73,15 +112,33 @@ def message_to_blocks(message: str) -> List[int]:
     return blocks
     
 
-def encrypt(message: str, key:str):
-    blocks = message_to_blocks(message)
-    # p = permute(blocks[0], IP)
+def encryptBlock(block: str, keys:Dict) -> int:
+
+    
+    
+
+
+    
+    ip = permute(block, IP)
+    ip = padBits(bin(ip)[2:], 64)
     # print(bin(blocks[0]))
-    key = 1383827165325090801
-    getSubkeys(key)
     # print(bin(p))
-    # pInv = permute(p, IP_INV)
-    # print(bin(pInv))
+    upper = ip[:32]
+    lower = ip[32:]
+    ciphertext = getCiphertext(upper, lower, keys)
+    
+    
+def encrypt(message: str, key:str):
+    key = 1383827165325090801
+    keys = getKeys(key)
+
+    blocks = messageToBlocks(message)
+    blocks = [81985529216486895]
+
+    ciphertexts = []
+    for block in blocks:
+        ciphertexts.append(encryptBlock(block, keys))
+
 
 
 def test():
@@ -92,5 +149,5 @@ def test():
     print(keys)
 
 if __name__ == "__main__":
-    test()
-    # encrypt("AAAAAAAA", "A")
+    # test()
+    encrypt("AAAAAAAA", "A")
