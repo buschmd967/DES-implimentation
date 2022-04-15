@@ -1,17 +1,20 @@
 from operator import xor
 import sys
 from math import ceil
-from typing import Dict, List
+from tkinter import getint
+from typing import Dict, List, Tuple
 from des_tables import *
 
 
 # Large help from https://page.math.tu-berlin.de/~kant/teaching/hess/krypto-ws2006/des.htm
 
+# Get binary string to be expected length
 def padBits(bits, l=64):
     while(len(bits) < l):
        bits = "0" + bits
     return bits
 
+# Change data to binary string, then permute given table from des_tables.py
 def permute(data: int, table:List[int], pad=64) -> int:
     out = []
     bits = bin(data)[2:]
@@ -21,45 +24,56 @@ def permute(data: int, table:List[int], pad=64) -> int:
     outBits = "".join(out)
     return(int(outBits, 2))
 
-def shiftKeys(upper, lower, n):
+# Shift start bit of binary string to end
+def shiftKeys(upper: str, lower: str, n: int) -> Tuple[str, str]:
     for i in range(n):
         upper = upper[1:] + upper[0]
         lower = lower[1:] + lower[0]
     return upper, lower
 
-
-def getSubkeys(key: int) -> Dict:
+# Get C0 - C15 and D0 - D15. Notation taken from DES writeup noted above
+def getSubkeys(key: int) -> Dict[str, List[str]]:
     keys = {"C":[], "D":[] }
     key = permute(key, PC1)
     key = bin(key)[2:]
     key = padBits(key, 56)
-    # print(f"{key=}")
 
+    # Split into upper and lower halves
     upper = key[0:28]
     lower = key[28:]
 
-    # print(f"{upper=} {lower=}")
+    # Shift and add to corresponding list
     for i in range(16):
         upper, lower = shiftKeys(upper, lower, SHIFT[i])
         keys["C"].append(upper)
         keys["D"].append(lower)
         
-
     return keys
         
+# Take string key and convert to usable int. Truncates key to first 4 characters, as DES takes in 64-bit key
+def getIntKey(key:str) -> int:
+    key_trunc = key[:4]
+    key_enc = key_trunc.encode()
+    return int.from_bytes(key_enc, byteorder='big')
 
+# Generate keys for encryption + decryption from integer key
 def getKeys(key: int) -> Dict:
     subkeys = getSubkeys(key)
     keys = []
     for i in range(16):
+        #concat upper and lower parts
         key_concat = subkeys["C"][i] + subkeys["D"][i]
+        #change to integer for permute function
         key_concat_int = int(key_concat, 2)
+        #permute using PC2
         key_int = permute(key_concat_int, PC2, 56)
+        #format and append to keys
         key = padBits(bin(key_int)[2:], 48)
         keys.append(key)
     return keys
-    
-def S(input, box):
+
+# Sbox function
+def S(input, box) -> str:
     input = padBits(bin(input)[2:], 6)
     i = input[0] + input[-1]
     i = int(i, 2)
@@ -69,34 +83,41 @@ def S(input, box):
     out = padBits(bin(out).replace("0b",""), 4)
     return out
 
-def f(right: str, key: str):
+# fbox function
+def f(right: str, key: str)-> int:
     right = permute(int(right, 2), ESEL, 32)
-    # right = int(right, 2)
     key = int(key, 2)
     data_xor = xor(key, right)
     data = padBits(bin(data_xor)[2:], 48)
     out = ""
     for i in range(len(data)//6):
+        #break into 6-bit chunks
         box_in = data[i*6:(i+1)*6]
+        #perform corresponding sbox function (returns string of bits)
         box_out = S(int(box_in, 2), SBOXES[i])
         out += box_out
     return permute(int(out, 2), P, 32)
     
-        
-
-
-def getCiphertext(left: str, right: str, keys: List[str]) -> int:
+# main xor chain. Since the only difference between encrypting and decrypting 
+# is the order in which the sboxes are applied, a reverse flag is used to distinguish
+def xorChain(left: str, right: str, keys: List[str], reverse=False) -> int:
     for i in range(16):
+
+        # perform fbox operation
+        if(reverse):
+            f_out = f(right, keys[15-i])
+        else:
+            f_out = f(right, keys[i])
+        
         newLeft = right
-        f_out = f(right, keys[i])
         right = xor(int(left, 2), f_out)
         right = padBits(bin(right)[2:], 32)
         left = newLeft
     out = right + left
-    print(out)
-    out = permute(int(out, 2), IP_INV)
     return out
 
+
+# convert string message to list of 64-bit integers
 def messageToBlocks(message: str) -> List[int]:
     message = message.encode()
     chunkSize = 8
@@ -107,47 +128,93 @@ def messageToBlocks(message: str) -> List[int]:
         chunk = message[chunkSize * i: chunkSize * i+chunkSize]
         block = int.from_bytes(chunk, byteorder='big')
         blocks.append(block)
-        # blocks.append(1383827165325090801)
     
     return blocks
     
+# convert list of 64-bit integers back to human-readable string. Returns None if it encounteres an error
+# (error usually caused by incorrect key)
+def blocksToMessage(blocks: List[int]) -> str:
+    message = ""
+    for block in blocks:
+        bytes = block.to_bytes(8, byteorder='big')
+        try:
+            message += bytes.decode()
+        except UnicodeDecodeError:
+            return None
+    return message
 
-def encryptBlock(block: str, keys:Dict) -> int:
-
-    
-    
-
-
-    
+# encrypt integer block of message
+def encryptBlock(block: int, keys:Dict) -> int:
+    #permute using Initial Permutation table
     ip = permute(block, IP)
     ip = padBits(bin(ip)[2:], 64)
-    # print(bin(blocks[0]))
-    # print(bin(p))
+
+    #get upper and lower halves
     upper = ip[:32]
     lower = ip[32:]
-    ciphertext = getCiphertext(upper, lower, keys)
-    
-    
-def encrypt(message: str, key:str):
-    key = 1383827165325090801
-    keys = getKeys(key)
 
+    #do main part of DES
+    ciphertext = xorChain(upper, lower, keys)
+
+    #undo initial permutation
+    return permute(int(ciphertext, 2), IP_INV)
+
+
+# encrypt entire message by splitting into blocks, then encrypting each block
+def encrypt(message: str, key:str):
+    # get keys first
+    keys = getKeys(getIntKey(key))
+    #convert message into 64-bit integers
     blocks = messageToBlocks(message)
-    blocks = [81985529216486895]
 
     ciphertexts = []
     for block in blocks:
+        #encrypt each block
         ciphertexts.append(encryptBlock(block, keys))
+        
+    return ciphertexts
 
+# decrypt single block
+def decryptBlock(block:int, keys:Dict) -> int:
+    # perform Initial Permutation
+    ip = permute(block, IP)
+    ip = padBits(bin(ip)[2:], 64)
 
+    # Get halves
+    upper = ip[:32]
+    lower = ip[32:]
+
+    # Do main DES
+    decrypted = xorChain(upper, lower, keys, True)
+
+    #undo initial permutation
+    return permute(int(decrypted, 2), IP_INV)
+
+# given list of blocks, convert into plaintext message
+def decrypt(blocks:List[int], key: str) -> str:
+    #Get keys
+    keys = getKeys(getIntKey(key))
+
+    outBlocks = []
+    for block in blocks:
+        # decrypt each block
+        outBlocks.append(decryptBlock(block, keys))
+    
+    #convert to plaintext message
+    message = blocksToMessage(outBlocks)
+    if(message == None):
+        # message is none if the decrypted blocks are not valid ascii characters
+        message = "ERROR: message not in ascii format. Is your key correct?"
+    return message
 
 def test():
-    # print(padBits(bin(1383827165325090801).strip('0b')))
-    keys = getKeys(1383827165325090801)
-    # print(keys["C"])
-    # print(keys["D"])
-    print(keys)
+    ciphertexts = encrypt("Aawdoijoijo", "12345")
+    print(ciphertexts)
+    message = decrypt(ciphertexts, "1234")
+    print(message)
+
 
 if __name__ == "__main__":
-    # test()
-    encrypt("AAAAAAAA", "A")
+    # encrypt("AAAAAAAA", "A")
+    test()
+
