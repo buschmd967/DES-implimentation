@@ -44,9 +44,6 @@ def getKeys(k):
     return p, g, b, a
 
 
-
-
-
 def encrypt(message: int, a: int, g: int, p: int):
     B = getSecretExponent(p)
     halfmask = pow(g, B, p)
@@ -59,16 +56,16 @@ def decrypt(y, b, halfmask, p):
     return (y * modInv(fullmask, p)) % p
 
 
-def encryptMessage(message: str, k: int):
-    p, g, b, a = getKeys(k)
+def encryptMessage(message: str, a: int, g: int, p: int):
+    
     m = message.encode()
     m = int.from_bytes(m, byteorder='big')
-    return {"secret": b, "public": (p, encrypt(m, a, g, p))}
+    return encrypt(m, a, g, p)
 
 
-# Takes in c, of form: (prime, (cipher, halfmask))
-def decryptMessage(c: Tuple[int, Tuple[int, int]], b: int):
-    p, (c, halfmask) = c
+# Takes in c, of form: (cipher, halfmask)
+def decryptMessage(c: Tuple[int, int], p: int, b: int):
+    (c, halfmask) = c
     m = decrypt(c, b, halfmask, p)
     byteNumber = ceil(len(bin(m).replace("0b", "")) / 8)
     plaintext_bytes = m.to_bytes(byteNumber, byteorder='big')
@@ -76,11 +73,10 @@ def decryptMessage(c: Tuple[int, Tuple[int, int]], b: int):
 
 def test():
     message = "ABCD"
-
+    k = 1024
+    p, g, b, a = getKeys(k)
     for i in range(100):
-        c = encryptMessage(message, 32)
-        b = c["secret"]
-        c = c["public"]
+        c = encryptMessage(message, a, g, p)
         if(message != decryptMessage(c, b)):
             print("Error")
             break

@@ -207,10 +207,13 @@ def decrypt(blocks:List[int], key: str) -> str:
         message = "ERROR: message not in ascii format. Is your key correct?"
     return message
 
+
+# 10591283530177398296
 def test():
-    ciphertexts = encrypt("Aawdoijoijo", "12345")
+    ciphertexts = encrypt("guest\n", "ABCD")
     print(ciphertexts)
-    message = decrypt(ciphertexts, "1234")
+    print(decrypt([ciphertexts[0]], "ABCD"))
+    message = decrypt(ciphertexts, "ABCD")
     print(message)
 
 

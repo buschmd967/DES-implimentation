@@ -2,6 +2,8 @@ from threading import Thread, Event
 import socket
 import sys
 
+import elgamal as elg
+import des
 
 def connect(hostname, port):
 
@@ -22,10 +24,43 @@ def recvMessages(s):
             print("Socket closed. Goodbye")
             return
 
- 
+def sendDESMessage(s: socket, message: str, key: str):
+    if(message[-1] != "\n"):
+        message += "\n"
+    blocks = des.encrypt(message, key)
+    for block in blocks:
+        m = str(block).encode()
+        s.send(m)
+    
+
+def initialConnection(s: socket, username: str):
+    deskey = input("Specify DES key: ").replace("\n", "")[:4]
+
+    message = "OPEN"
+    bytes = str.encode(message)
+    s.sendall(bytes)
+    print("Sent open")
+
+    # getting elgamal keys
+    data = s.recv(1024).decode()
+    keys = data.split(" ")
+    keys = (int(keys[0]), int(keys[1]), int(keys[2]))
+    g, a, p = keys
+    c = elg.encryptMessage(deskey, a, g, p)
+    message = f"{c[0]} {c[1]}".encode()
+
+    s.sendall(message)
+    print("sent key, awaiting ack")
+    data = s.recv(1024)
+    print("sending username")
+    sendDESMessage(s, username, deskey)
+
+    return deskey
+
+
 def main():
     username = "guest"
-    port = 1234
+    port = 2230
     print(sys.argv)
     if(len(sys.argv) < 2):
         print("Please specify hostname and port")
@@ -40,12 +75,8 @@ def main():
             username = sys.argv[2]
 
     s = connect(hostname, port)
-    
-
-    message = "OPEN:" + username
-    bytes = str.encode(message)
-    s.sendall(bytes)
-    print("Sent open")
+    key = initialConnection(s, username)
+   
 
 
     Thread(target=recvMessages, args=(s,)).start()
@@ -54,7 +85,7 @@ def main():
         
         message = input("")
 
-        s.sendall(message.encode())
+        sendDESMessage(s, message, key)
         if(message == "CLOSE"):
             s.close()
             sys.exit()
