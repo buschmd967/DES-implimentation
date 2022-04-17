@@ -89,13 +89,16 @@ def sendLoop(newClients: Queue, messages: Queue, disconnectedClients: Queue, qui
                 des.sendDESMessage(client, message, key)
             messages.task_done()
 
-def consoleControl(quit: Event):
-    x = input("")
-    if(x == "CLOSE"):
-        print("QUITTING")
-        quit.set()
-        sleep(.5)
-        sys.exit()
+def consoleControl(messageQueue: Queue, quit: Event):
+    while True:
+        x = input("")
+        if(x == "CLOSE"):
+            print("QUITTING")
+            quit.set()
+            sleep(.5)
+            sys.exit()
+        else:
+            messageQueue.put("server: " + x)
 
 def newConnectionLoop(s: socket, messages: Queue, newClients: Queue, disconnectedClients: Queue, publicKeys, quitEvent: Event):
     while(True):
@@ -128,7 +131,7 @@ def main():
     disconnectedClients = Queue()
     quitEvent = Event()
 
-    t1 = Thread(target=consoleControl, args=(quitEvent,))
+    t1 = Thread(target=consoleControl, args=(messages, quitEvent))
     t2 = Thread(target=sendLoop, args=(newClients, messages, disconnectedClients, quitEvent))
     t3 = Thread(target=newConnectionLoop, args=(s, messages, newClients, disconnectedClients, publicKeys, quitEvent))
 
