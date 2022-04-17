@@ -31,7 +31,7 @@ def recvMessages(s, key, quitEvent):
         except Exception as e:
             print("Socket closed. Goodbye")
             quitEvent.set()
-            # print(e)
+            print(e)
             return
 
 
@@ -75,8 +75,9 @@ def main():
     port = 1234
     print(sys.argv)
     if(len(sys.argv) < 2):
-        print("Please specify hostname and port")
-        sys.exit()
+        # print("Please specify hostname")
+        # sys.exit()
+        hostname = "localhost"
     elif(len(sys.argv) >= 2):
         hostname = sys.argv[1]
         if(len(hostname.split(":")) == 2):

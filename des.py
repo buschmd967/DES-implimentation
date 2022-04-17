@@ -226,7 +226,7 @@ def getDesMessage(s: socket, key):
     except ValueError: # Happens when client closes connection
         return ""
     numOfBlocks = int(numOfBlocks)
-    # print(numOfBlocks)
+    # print(f"recieving {numOfBlocks=}")
     # print(f"in getDESMESSAGE: {data=}")
 
     strblocks = d
@@ -257,7 +257,10 @@ def sendDESMessage(s: socket, message: str, key: str):
     m = encrypt(str(numOfBlocks), key)[0]
     m = (str(m) + "|").encode()
     # print(f"sending encrypted numOfBytes: {m}")
-    s.send(m)
+    try:
+        s.send(m)
+    except BrokenPipeError: # happens when socket is closed
+        return
     for block in blocks:
         m = (str(block) + "|").encode()
         # print(f"sending block: {m}")
@@ -269,9 +272,9 @@ def sendDESMessage(s: socket, message: str, key: str):
 
 
 def test():
-    # ciphertexts = encrypt("guest\n", "ABCD")
+    # ciphertexts = encrypt("guest", "ABCD")
     # print(ciphertexts)
-    print(decrypt([3995267046004588734, 9252507308338199152, 10278278148011571393], "ABCD"))
+    print(decrypt([11155395701864723421,6054442426982156980,525143883997323992,784526996112718684,4779905736353231856,3855856669287893029,16611759632450710342,4779905736353231856,525143883997323992,784526996112718684,4779905736353231856], "abcd"))
     # message = decrypt(ciphertexts, "ABCD")
     # print(message)
 
