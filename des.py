@@ -1,9 +1,12 @@
+from multiprocessing.sharedctypes import Value
 from operator import xor
+from socket import socket
 import sys
 from math import ceil
 from tkinter import getint
 from typing import Dict, List, Tuple
 from des_tables import *
+from time import sleep
 
 
 # Large help from https://page.math.tu-berlin.de/~kant/teaching/hess/krypto-ws2006/des.htm
@@ -198,7 +201,7 @@ def decrypt(blocks:List[int], key: str) -> str:
     outBlocks = []
     for block in blocks:
         # decrypt each block
-        outBlocks.append(decryptBlock(block, keys))
+        outBlocks.append(decryptBlock(int(block), keys))
     
     #convert to plaintext message
     message = blocksToMessage(outBlocks)
@@ -207,14 +210,60 @@ def decrypt(blocks:List[int], key: str) -> str:
         message = "ERROR: message not in ascii format. Is your key correct?"
     return message
 
+def getDesMessage(s: socket, key):
+    # print("recieving numOfBlocks")
+    d = s.recv(1024).decode()
+    possibleNumOfBLocks = d.split("|")[0]
+    # print(f"got d: {possibleNumOfBLocks}")
+    numOfBlocks = decrypt([int(possibleNumOfBLocks)], key).replace("\x00", "")
+    numOfBlocks = int(numOfBlocks)
+    # print(numOfBlocks)
+    # print(f"in getDESMESSAGE: {data=}")
 
-# 10591283530177398296
+    strblocks = d
+    while(len(strblocks.split("|")) < numOfBlocks+1):
+        chunk = s.recv(1024).decode()
+        strblocks += chunk
+        # print(f"blocks recieved so far: {len(strblocks.split('|'))} / {numOfBlocks}")
+    # print("Got all blocks")
+
+    blocks = []
+    splitBlocks = strblocks.split('|')
+    for i in range(len(splitBlocks)):
+        if i != 0:
+            b = splitBlocks[i]
+            if(b != ""):
+                blocks.append(b)
+    
+    message = decrypt(blocks, key)
+
+    message = message.replace("\x00", "")
+    return message
+
+def sendDESMessage(s: socket, message: str, key: str):
+    if(message[-1] != "\n"):
+        message += "\n"
+    blocks = encrypt(message, key)
+    numOfBlocks = len(blocks) + 1
+    # print(f"blocks to send: {blocks}")
+    # print(f"numOfBlocks: {numOfBlocks}")
+    m = encrypt(str(numOfBlocks), key)[0]
+    m = (str(m) + "|").encode()
+    # print(f"sending encrypted numOfBytes: {m}")
+    s.send(m)
+    for block in blocks:
+        m = (str(block) + "|").encode()
+        # print(f"sending block: {m}")
+        s.send(m)
+    # print("all blocks sent")
+
+
 def test():
-    ciphertexts = encrypt("guest\n", "ABCD")
-    print(ciphertexts)
-    print(decrypt([ciphertexts[0]], "ABCD"))
-    message = decrypt(ciphertexts, "ABCD")
-    print(message)
+    # ciphertexts = encrypt("guest\n", "ABCD")
+    # print(ciphertexts)
+    print(decrypt([3995267046004588734, 9252507308338199152, 10278278148011571393], "ABCD"))
+    # message = decrypt(ciphertexts, "ABCD")
+    # print(message)
 
 
 if __name__ == "__main__":

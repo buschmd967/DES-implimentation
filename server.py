@@ -2,40 +2,21 @@ import socket
 from threading import Thread
 from queue import Queue
 from typing import Tuple
-
+import sys
 import des
 import elgamal as elg
 
 
-def startup():
+def startup(port=1234):
     s = socket.socket()
 
     ip = "127.0.0.1"
-    port = 2230
 
     s.bind((ip, port))
 
     return s
 
-def getDesMessage(client, key):
-    # print("getting message")
-    try:
-        data = int(client.recv(1024).decode())
-        message = des.decrypt([data], key)
-    except ValueError:
-        return ""
-    while(message[-1] != "\n"):
-        try:
-            data = int(client.recv(64).decode())
-            message += des.decrypt([data], key)
-        except ValueError:
-            message += "\n"
-    # print(message)
-    message = message.replace("\x00", "")
-    return message
-
-
-def recvLoop(client, messageQueue: Queue, disconnectedClients: Queue, keys: Tuple[int, int, int, int]):
+def recvLoop(client, messageQueue: Queue, newClients: Queue, disconnectedClients: Queue, keys: Tuple[int, int, int, int]):
     
     # Initial connection
     g, a, p, b = keys
@@ -57,18 +38,22 @@ def recvLoop(client, messageQueue: Queue, disconnectedClients: Queue, keys: Tupl
             print("got key")
             client.send(b'OK')
             # Get username
-            username = getDesMessage(client, key)
+            username = des.getDesMessage(client, key)
             username = username.replace("\x00", "").replace("\n", "")
             print(f"username type: {type(username)} and {username=}")
             # username = username
+
+            print("PUTTING NEW CLIENT")
+            newClients.put((client, key))
+
             message = f"{username} has joined"
-            messageQueue.put(message.encode())
+            messageQueue.put(message)
     else:
         return
 
     closed = False
     while(not closed):
-        message = getDesMessage(client, key).replace("\n", "")
+        message = des.getDesMessage(client, key).replace("\n", "")
         if message == "":
             pass
         elif(message=="CLOSE"):
@@ -76,8 +61,9 @@ def recvLoop(client, messageQueue: Queue, disconnectedClients: Queue, keys: Tupl
 
             print("Closing connection")
             message = f"{username} has left"
-            messageQueue.put(message.encode())
-            disconnectedClients.put(client)
+            messageQueue.put(message)
+            print(f"Putting client into disconnectedClients: {(client, key)}")
+            disconnectedClients.put((client, key))
             closed = True
             return
         else:
@@ -86,7 +72,7 @@ def recvLoop(client, messageQueue: Queue, disconnectedClients: Queue, keys: Tupl
 
             message = username + ": " + message
             print(message)
-            messageQueue.put(message.encode())
+            messageQueue.put(message)
 
 def sendLoop(newClients: Queue, messages: Queue, disconnectedClients: Queue):
     connectedClients = []
@@ -102,13 +88,21 @@ def sendLoop(newClients: Queue, messages: Queue, disconnectedClients: Queue):
         while not messages.empty():
             message = messages.get()
             # print(message)
-            for client in connectedClients:
-                client.send(message)
+            for client, key in connectedClients:
+                des.sendDESMessage(client, message + "\n", key)
             messages.task_done()
 
 
 def main():
-    s = startup()
+    port = 1234
+    if(len(sys.argv) > 1):
+        port = sys.argv[1]
+        if(not port.isnumeric):
+            print("invaid port specified")
+            return
+        else:
+            port = int(port)
+    s = startup(port)
     s.listen()
     k = input("Enter k-bit elgamal key length (at least 32): ")
     k = int(k)
@@ -121,11 +115,11 @@ def main():
     newClients = Queue()
     disconnectedClients = Queue()
     
-    Thread(target=sendLoop, args=(newClients, messages,disconnectedClients, )).start()
+    Thread(target=sendLoop, args=(newClients, messages, disconnectedClients, )).start()
     while(True):
         (client, clientAddress) = s.accept()
-        newClients.put(client)
-        Thread(target=recvLoop, args=(client,messages, disconnectedClients, publicKeys)).start()
+        # newClients.put(client)
+        Thread(target=recvLoop, args=(client,messages, newClients, disconnectedClients, publicKeys)).start()
         
 
     

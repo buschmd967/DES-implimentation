@@ -15,22 +15,19 @@ def connect(hostname, port):
         sys.exit()
     return s
 
-def recvMessages(s):
+
+
+def recvMessages(s, key):
     while True:
         try:
-            data = s.recv(1024)
-            print(data.decode())
+            message = des.getDesMessage(s, key)
+            print(message.replace("\n", ""))
         except Exception as e:
             print("Socket closed. Goodbye")
+            print(e)
             return
 
-def sendDESMessage(s: socket, message: str, key: str):
-    if(message[-1] != "\n"):
-        message += "\n"
-    blocks = des.encrypt(message, key)
-    for block in blocks:
-        m = str(block).encode()
-        s.send(m)
+
     
 
 def initialConnection(s: socket, username: str):
@@ -53,14 +50,14 @@ def initialConnection(s: socket, username: str):
     print("sent key, awaiting ack")
     data = s.recv(1024)
     print("sending username")
-    sendDESMessage(s, username, deskey)
+    des.sendDESMessage(s, username, deskey)
 
     return deskey
 
 
 def main():
     username = "guest"
-    port = 2230
+    port = 2257
     print(sys.argv)
     if(len(sys.argv) < 2):
         print("Please specify hostname and port")
@@ -79,13 +76,13 @@ def main():
    
 
 
-    Thread(target=recvMessages, args=(s,)).start()
+    Thread(target=recvMessages, args=(s,key)).start()
 
     while(True):
         
         message = input("")
 
-        sendDESMessage(s, message, key)
+        des.sendDESMessage(s, message, key)
         if(message == "CLOSE"):
             s.close()
             sys.exit()
