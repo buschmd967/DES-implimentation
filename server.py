@@ -1,8 +1,11 @@
+from multiprocessing import Event
 import socket
 from threading import Thread
 from queue import Queue
 from typing import Tuple
 import sys
+from time import sleep
+
 import des
 import elgamal as elg
 
@@ -23,8 +26,6 @@ def recvLoop(client, messageQueue: Queue, newClients: Queue, disconnectedClients
     publicKeys = f"{g} {a} {p}"
     key = ""
     data = client.recv(64)
-    print("got connection")
-    print(data)
     if(data.decode()=='OPEN'): 
             # Send public elgamal keys
             client.send(publicKeys.encode())
@@ -35,15 +36,12 @@ def recvLoop(client, messageQueue: Queue, newClients: Queue, disconnectedClients
             values = message.split(" ")
             c = (int(values[0]), int(values[1]))
             key = elg.decryptMessage(c, p, b)
-            print("got key")
             client.send(b'OK')
             # Get username
             username = des.getDesMessage(client, key)
             username = username.replace("\x00", "").replace("\n", "")
-            print(f"username type: {type(username)} and {username=}")
             # username = username
 
-            print("PUTTING NEW CLIENT")
             newClients.put((client, key))
 
             message = f"{username} has joined"
@@ -57,26 +55,25 @@ def recvLoop(client, messageQueue: Queue, newClients: Queue, disconnectedClients
         if message == "":
             pass
         elif(message=="CLOSE"):
-            print(f"Got message: '{message}'")
 
-            print("Closing connection")
             message = f"{username} has left"
             messageQueue.put(message)
-            print(f"Putting client into disconnectedClients: {(client, key)}")
             disconnectedClients.put((client, key))
             closed = True
             return
         else:
-            print(f"'{message.encode()}' != 'CLOSE'")
-            print(f"Got message: '{message}'")
 
             message = username + ": " + message
-            print(message)
             messageQueue.put(message)
 
-def sendLoop(newClients: Queue, messages: Queue, disconnectedClients: Queue):
+def sendLoop(newClients: Queue, messages: Queue, disconnectedClients: Queue, quit: Event):
     connectedClients = []
     while True:
+        if(quit.is_set()):
+            for client, key in connectedClients:
+                des.sendDESMessage(client, "CLOSE", key)
+                client.close()
+            return
         while not disconnectedClients.empty():
             oldClient = disconnectedClients.get()
             connectedClients.remove(oldClient)
@@ -87,11 +84,26 @@ def sendLoop(newClients: Queue, messages: Queue, disconnectedClients: Queue):
             newClients.task_done()
         while not messages.empty():
             message = messages.get()
-            # print(message)
+            print(message)
             for client, key in connectedClients:
-                des.sendDESMessage(client, message + "\n", key)
+                des.sendDESMessage(client, message, key)
             messages.task_done()
 
+def consoleControl(quit: Event):
+    x = input("")
+    if(x == "CLOSE"):
+        print("QUITTING")
+        quit.set()
+        sleep(.5)
+        sys.exit()
+
+def newConnectionLoop(s: socket, messages: Queue, newClients: Queue, disconnectedClients: Queue, publicKeys, quitEvent: Event):
+    while(True):
+        (client, clientAddress) = s.accept()
+        # newClients.put(client)
+        Thread(target=recvLoop, args=(client,messages, newClients, disconnectedClients, publicKeys)).start()
+        if(quitEvent.is_set()):
+            break
 
 def main():
     port = 1234
@@ -114,12 +126,24 @@ def main():
     messages = Queue()
     newClients = Queue()
     disconnectedClients = Queue()
-    
-    Thread(target=sendLoop, args=(newClients, messages, disconnectedClients, )).start()
-    while(True):
-        (client, clientAddress) = s.accept()
-        # newClients.put(client)
-        Thread(target=recvLoop, args=(client,messages, newClients, disconnectedClients, publicKeys)).start()
+    quitEvent = Event()
+
+    t1 = Thread(target=consoleControl, args=(quitEvent,))
+    t2 = Thread(target=sendLoop, args=(newClients, messages, disconnectedClients, quitEvent))
+    t3 = Thread(target=newConnectionLoop, args=(s, messages, newClients, disconnectedClients, publicKeys, quitEvent))
+
+    t3.daemon = True
+
+    t1.start()
+    t2.start()
+    t3.start()
+
+
+    while True:
+        if(quitEvent.is_set()):
+            t1.join()
+            t2.join()
+            break
         
 
     

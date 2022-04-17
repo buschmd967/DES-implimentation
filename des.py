@@ -55,6 +55,8 @@ def getSubkeys(key: int) -> Dict[str, List[str]]:
         
 # Take string key and convert to usable int. Truncates key to first 4 characters, as DES takes in 64-bit key
 def getIntKey(key:str) -> int:
+    if(key.isnumeric()):
+        return int(key)
     key_trunc = key[:4]
     key_enc = key_trunc.encode()
     return int.from_bytes(key_enc, byteorder='big')
@@ -212,10 +214,17 @@ def decrypt(blocks:List[int], key: str) -> str:
 
 def getDesMessage(s: socket, key):
     # print("recieving numOfBlocks")
-    d = s.recv(1024).decode()
+    try:
+        d = s.recv(1024).decode()
+    except OSError: # Errno 9 Bad file descriptor, happens when closing socket
+        return ""
+
     possibleNumOfBLocks = d.split("|")[0]
     # print(f"got d: {possibleNumOfBLocks}")
-    numOfBlocks = decrypt([int(possibleNumOfBLocks)], key).replace("\x00", "")
+    try:
+        numOfBlocks = decrypt([int(possibleNumOfBLocks)], key).replace("\x00", "")
+    except ValueError: # Happens when client closes connection
+        return ""
     numOfBlocks = int(numOfBlocks)
     # print(numOfBlocks)
     # print(f"in getDESMESSAGE: {data=}")
@@ -241,8 +250,6 @@ def getDesMessage(s: socket, key):
     return message
 
 def sendDESMessage(s: socket, message: str, key: str):
-    if(message[-1] != "\n"):
-        message += "\n"
     blocks = encrypt(message, key)
     numOfBlocks = len(blocks) + 1
     # print(f"blocks to send: {blocks}")
@@ -254,7 +261,10 @@ def sendDESMessage(s: socket, message: str, key: str):
     for block in blocks:
         m = (str(block) + "|").encode()
         # print(f"sending block: {m}")
-        s.send(m)
+        try:
+            s.send(m)
+        except BrokenPipeError: # happens when socket is closed
+            return
     # print("all blocks sent")
 
 

@@ -17,21 +17,36 @@ def connect(hostname, port):
 
 
 
-def recvMessages(s, key):
+def recvMessages(s, key, quitEvent):
     while True:
         try:
-            message = des.getDesMessage(s, key)
+            if(quitEvent.is_set()):
+                return
+            message = des.getDesMessage(s, key).replace("\n", "")
+            if(message == "CLOSE"):
+                quitEvent.set()
+                print("Server shut down")
+                return
             print(message.replace("\n", ""))
         except Exception as e:
             print("Socket closed. Goodbye")
-            print(e)
+            quitEvent.set()
+            # print(e)
             return
 
 
-    
+def sendLoop(s, key, quitEvent):
+    while(True):
+        
+        message = input("")
+
+        des.sendDESMessage(s, message, key)
+        if(message == "CLOSE"):
+            quitEvent.set()
+            sys.exit()
 
 def initialConnection(s: socket, username: str):
-    deskey = input("Specify DES key: ").replace("\n", "")[:4]
+    deskey = input("Specify DES key: ").replace("\n", "")
 
     message = "OPEN"
     bytes = str.encode(message)
@@ -57,7 +72,7 @@ def initialConnection(s: socket, username: str):
 
 def main():
     username = "guest"
-    port = 2257
+    port = 1234
     print(sys.argv)
     if(len(sys.argv) < 2):
         print("Please specify hostname and port")
@@ -71,22 +86,27 @@ def main():
         if(len(sys.argv) == 3):
             username = sys.argv[2]
 
+    quitEvent = Event()
+
     s = connect(hostname, port)
     key = initialConnection(s, username)
    
 
 
-    Thread(target=recvMessages, args=(s,key)).start()
+    t1 = Thread(target=recvMessages, args=(s,key, quitEvent))
+    t2 = Thread(target=sendLoop, args=(s, key, quitEvent,))
 
-    while(True):
-        
-        message = input("")
+    t1.daemon = True
+    t2.daemon = True
 
-        des.sendDESMessage(s, message, key)
-        if(message == "CLOSE"):
-            s.close()
+    t1.start()
+    t2.start()
+
+    while True:
+        if(quitEvent.is_set()):
             sys.exit()
- 
+
+
 
 
     
